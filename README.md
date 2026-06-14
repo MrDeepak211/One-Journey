@@ -1,7 +1,8 @@
 # 🚇 OneJourney AI — Unified Mobility Super App
+**Phase 1: Mumbai + Pune + Maharashtra**
 
-**Team:** Night Wolf 🐺 | **Participant:** Deepak Tandale  
-**Institute:** SSIEMS Parbhani • Dr. BATU Lonere  
+**Team:** Night Wolf 🐺 | **Participant:** Deepak Tandale
+**Institute:** SSIEMS Parbhani • Dr. BATU Lonere
 **Hackathon:** OneJourney Mobility Hackathon 2026
 
 ---
@@ -9,46 +10,38 @@
 ## 🚀 Run in 3 Steps
 
 ```bash
-# 1. Install
 pip install -r requirements.txt
-
-# 2. Add API Key (optional — app works without it too!)
-set ANTHROPIC_API_KEY=your_key_here   # Windows
-export ANTHROPIC_API_KEY=your_key_here  # Mac/Linux
-
-# 3. Run
+export ANTHROPIC_API_KEY=your_key_here   # optional
 streamlit run app.py
 ```
 Open → **http://localhost:8501** 🎉
 
 ---
 
-## ✨ Features
+## 🖥️ UI Features (Matching Reference Design)
+- **Navbar** — Logo, weather, notifications, user profile
+- **Sidebar** — Navigation + Impact stats + Night Wolf branding
+- **Left Panel** — Journey form with quick stats
+- **Center Panel** — Filter tabs + Route cards + Live alerts
+- **Right Panel** — Folium map + AI chat assistant
 
-| Feature | Description | Intelligence |
-|---|---|---|
-| 🗺️ Route Planner | Real geocoding via OpenStreetMap | Dynamic distance-based fares & times |
-| 🤖 AI Assistant | Hindi/English/Marathi queries | Claude AI + smart fallback |
-| 🛡️ Safety Score | Per-route safety ranking | Time-of-day aware |
-| 🌿 Carbon Score | Eco footprint per mode | CO₂ per km calculation |
-| 🔔 Live Alerts | Traffic/Metro/Weather alerts | SQLite driven |
-| 📊 Dashboard | Trip history & savings | Persistent DB |
-
-## 🛠️ Tech Stack
-- **Frontend:** Streamlit (Python)
-- **AI:** Claude AI API (Anthropic) + Smart Fallback
-- **Maps:** Folium + OpenStreetMap (Nominatim geocoding — FREE)
-- **Distance:** Haversine formula (real-world calculation)
-- **Database:** SQLite (persistent trip history)
-- **Alerts:** SQLite seed data
+## 🗺️ Coverage
+- **Mumbai** — Local Train (3 lines), Metro (Line 1, 2A), BEST Bus, Auto, Cab
+- **Pune** — Pune Metro (Purple + Aqua), PMC Bus, Auto, Cab
+- **Maharashtra** — 35+ cities including Parbhani, Nanded, Nashik, Aurangabad, Nagpur
+- **Intercity** — Real MSRTC + Indian Railways fares
+- **All India** — OpenStreetMap geocoding fallback
 
 ## 📂 Structure
 ```
 onejourney_app/
-├── app.py            ← Main app (all features)
-├── requirements.txt  ← Dependencies
-├── onejourney.db     ← Auto-created on first run
-└── README.md         ← This file
+├── app.py              ← Main app (full UI)
+├── requirements.txt
+├── README.md
+├── onejourney.db       ← Auto-created on first run
+└── data/
+    ├── __init__.py
+    └── cities.py       ← 70+ cities, real transport data
 ```
 
-*"One Search. Every Journey."* 🚇
+*"One Search. Every Journey."* 🚇🐺

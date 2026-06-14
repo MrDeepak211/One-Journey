@@ -1,707 +1,571 @@
 import streamlit as st
-import sqlite3
-import folium
-from streamlit_folium import st_folium
+import sqlite3, os, math, json, sys
+import urllib.request, urllib.parse
 from datetime import datetime
 import anthropic
-import os
-import math
-import urllib.request
-import urllib.parse
-import json
-import random
 
-# ── Page Config ──────────────────────────────────────────────
-st.set_page_config(
-    page_title="OneJourney AI",
-    page_icon="🚇",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+sys.path.insert(0, os.path.dirname(__file__))
+from data.cities import (CITIES, MUMBAI_LOCAL_LINES, MUMBAI_METRO_LINES,
+                          PUNE_METRO_LINES, BUS_ROUTES, INTERCITY_ROUTES,
+                          SAFETY_ZONES, CARBON_PER_KM)
 
-# ── Custom CSS ────────────────────────────────────────────────
+st.set_page_config(page_title="OneJourney AI", page_icon="🚇", layout="wide", initial_sidebar_state="collapsed")
+
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
-html, body, [class*="css"] { font-family: 'Inter', sans-serif; background-color: #0A1628; color: #FFFFFF; }
-.main, .stApp { background-color: #0A1628; }
-.hero-banner {
-    background: linear-gradient(135deg, #102447 0%, #0A1628 60%, #001529 100%);
-    border: 1px solid #00B4D8; border-radius: 16px;
-    padding: 1.5rem 2.5rem; margin-bottom: 1.2rem; text-align: center;
-}
-.hero-title { font-size: 2.8rem; font-weight: 700; color: #FFFFFF; margin: 0; }
-.hero-sub { font-size: 1.1rem; color: #00B4D8; margin: 0.2rem 0; }
-.hero-tag { font-size: 0.9rem; color: #94A3B8; font-style: italic; }
-.transport-pill {
-    display: inline-block; background: rgba(21,101,192,0.3);
-    border: 1px solid #1565C0; border-radius: 20px;
-    padding: 3px 12px; margin: 3px; font-size: 0.82rem; color: #fff;
-}
-.metric-card {
-    background: #102447; border: 1px solid #1565C0;
-    border-radius: 12px; padding: 1rem; text-align: center; margin: 0.3rem 0;
-}
-.metric-value { font-size: 1.8rem; font-weight: 700; color: #00B4D8; }
-.metric-label { font-size: 0.78rem; color: #94A3B8; }
-.route-card {
-    background: #102447; border-radius: 12px;
-    padding: 1rem 1.2rem; margin: 0.5rem 0; border-left: 4px solid #00B4D8;
-}
-.route-card.best { border-left: 4px solid #FFB300; background: #0D1F3C; }
-.route-title { font-size: 1.05rem; font-weight: 600; color: #FFFFFF; }
-.route-meta { font-size: 0.85rem; color: #94A3B8; margin-top: 0.3rem; }
-.badge { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: 600; }
-.badge-green { background: #1B5E20; color: #A5D6A7; }
-.badge-yellow { background: #E65100; color: #FFD54F; }
-.badge-red { background: #B71C1C; color: #EF9A9A; }
-.chat-user {
-    background: #1565C0; border-radius: 12px 12px 3px 12px;
-    padding: 0.8rem 1rem; margin: 0.5rem 0 0.5rem 3rem; color: #fff; font-size: 0.95rem;
-}
-.chat-ai {
-    background: #00695C; border-radius: 12px 12px 12px 3px;
-    padding: 0.8rem 1rem; margin: 0.5rem 3rem 0.5rem 0; color: #fff; font-size: 0.95rem;
-}
-.alert-card {
-    background: #0D1F3C; border: 1px solid #00B4D8;
-    border-radius: 10px; padding: 0.8rem 1rem; margin: 0.4rem 0; font-size: 0.9rem;
-}
-.section-header {
-    font-size: 1.3rem; font-weight: 700; color: #00B4D8;
-    margin: 1.2rem 0 0.6rem 0; padding-bottom: 0.3rem; border-bottom: 1px solid #1565C0;
-}
-div[data-testid="stSidebar"] { background-color: #102447; border-right: 1px solid #1565C0; }
-.stTextInput > div > div > input,
-.stTextArea > div > div > textarea {
-    background-color: #102447 !important; color: #FFFFFF !important;
-    border: 1px solid #1565C0 !important; border-radius: 8px !important;
-}
-.stButton > button {
-    background: linear-gradient(135deg, #1565C0, #00B4D8);
-    color: white; border: none; border-radius: 8px;
-    font-weight: 600; padding: 0.5rem 1.5rem;
-}
-.stSelectbox > div > div { background-color: #102447 !important; color: #FFFFFF !important; border: 1px solid #1565C0 !important; }
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body,[class*="css"],.stApp{font-family:'Inter',sans-serif!important;background:#0B0F1A!important;color:#E2E8F0!important;}
+.main .block-container{padding:0!important;max-width:100%!important;}
+section[data-testid="stSidebar"]{display:none!important;}
+::-webkit-scrollbar{width:5px;}::-webkit-scrollbar-track{background:#0B0F1A;}::-webkit-scrollbar-thumb{background:#1E2D4A;border-radius:3px;}
+.navbar{display:flex;align-items:center;justify-content:space-between;background:#111827;border-bottom:1px solid #1E2D4A;padding:0 20px;height:60px;position:sticky;top:0;z-index:100;}
+.nav-logo{width:38px;height:38px;border-radius:9px;background:linear-gradient(135deg,#3B82F6,#06B6D4);display:flex;align-items:center;justify-content:center;font-size:18px;}
+.nav-title{font-size:1rem;font-weight:800;color:#fff;}.nav-title span{color:#3B82F6;}
+.nav-sub{font-size:.65rem;color:#64748B;}
+.nav-right{display:flex;align-items:center;gap:16px;}
+.nav-weather-temp{font-size:1rem;font-weight:600;color:#fff;}
+.nav-weather-city{font-size:.65rem;color:#64748B;}
+.nav-bell{width:34px;height:34px;border-radius:8px;background:#1E2D4A;display:flex;align-items:center;justify-content:center;font-size:16px;position:relative;}
+.nav-badge{position:absolute;top:-4px;right:-4px;width:15px;height:15px;border-radius:50%;background:#EF4444;font-size:.55rem;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;}
+.nav-avatar{width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,#3B82F6,#8B5CF6);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;}
+.nav-uname{font-size:.82rem;font-weight:600;color:#fff;}.nav-urole{font-size:.65rem;color:#64748B;}
+.filter-tabs{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
+.ftab{padding:7px 14px;border-radius:10px;font-size:.75rem;font-weight:700;cursor:pointer;border:1px solid #1E2D4A;background:#111827;color:#64748B;}
+.ftab.best{border-color:#F59E0B;color:#F59E0B;background:rgba(245,158,11,.08);}
+.ftab.cheap{border-color:#10B981;color:#10B981;background:rgba(16,185,129,.08);}
+.ftab.fast{border-color:#EF4444;color:#EF4444;background:rgba(239,68,68,.08);}
+.ftab.eco{border-color:#22C55E;color:#22C55E;background:rgba(34,197,94,.08);}
+.ftab.safe{border-color:#3B82F6;color:#3B82F6;background:rgba(59,130,246,.08);}
+.sec-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;}
+.sec-title{font-size:.9rem;font-weight:700;color:#fff;}
+.sec-count{font-size:.72rem;color:#64748B;background:#1E2D4A;padding:3px 9px;border-radius:20px;}
+.rcard{background:#111827;border:1px solid #1E2D4A;border-radius:13px;padding:14px;margin-bottom:10px;transition:border-color .2s;}
+.rcard:hover{border-color:#3B82F6;}
+.rcard.best{border-color:#F59E0B;background:linear-gradient(135deg,rgba(245,158,11,.05),#111827);}
+.rcinner{display:flex;align-items:flex-start;gap:12px;}
+.micon{width:36px;height:36px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0;}
+.ib{background:rgba(59,130,246,.18);}.io{background:rgba(249,115,22,.18);}.ip{background:rgba(139,92,246,.18);}.ig{background:rgba(16,185,129,.18);}.ir{background:rgba(239,68,68,.18);}.it{background:rgba(6,182,212,.18);}
+.rname{font-size:.9rem;font-weight:700;color:#fff;margin-bottom:2px;}
+.rpath{font-size:.72rem;color:#64748B;margin-bottom:5px;}
+.rmeta{display:flex;align-items:center;gap:10px;font-size:.72rem;color:#94A3B8;}
+.rscores{display:flex;gap:10px;margin-top:6px;}
+.rscore{font-size:.68rem;color:#64748B;}
+.rright{text-align:right;min-width:90px;flex-shrink:0;}
+.rfare{font-size:1.2rem;font-weight:800;color:#fff;}
+.bpill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:.65rem;font-weight:700;margin-top:3px;}
+.pgold{background:rgba(245,158,11,.15);color:#F59E0B;border:1px solid rgba(245,158,11,.3);}
+.pgreen{background:rgba(16,185,129,.15);color:#10B981;border:1px solid rgba(16,185,129,.3);}
+.pred{background:rgba(239,68,68,.15);color:#EF4444;border:1px solid rgba(239,68,68,.3);}
+.pblue{background:rgba(59,130,246,.15);color:#3B82F6;border:1px solid rgba(59,130,246,.3);}
+.agrid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;}
+.acard{background:#111827;border:1px solid #1E2D4A;border-radius:11px;padding:11px;}
+.atype{font-size:.75rem;font-weight:700;}
+.amsg{font-size:.7rem;color:#94A3B8;line-height:1.4;margin:4px 0;}
+.asev{font-size:.63rem;font-weight:700;padding:2px 7px;border-radius:20px;}
+.sh{background:rgba(239,68,68,.15);color:#EF4444;}.sm{background:rgba(245,158,11,.15);color:#F59E0B;}.sl{background:rgba(16,185,129,.15);color:#10B981;}
+.atime{font-size:.63rem;color:#475569;}
+.sbitem{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;cursor:pointer;margin-bottom:3px;font-size:.82rem;font-weight:500;color:#94A3B8;}
+.sbitem:hover{background:#1E2D4A;color:#fff;}
+.sbitem.active{background:#1D4ED8;color:#fff;font-weight:600;}
+.impact-box{background:#0F172A;border:1px solid #1E2D4A;border-radius:11px;padding:12px;margin-top:10px;}
+.irow{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+.iicon{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.9rem;}
+.ival{font-size:.85rem;font-weight:700;}.ilbl{font-size:.65rem;color:#64748B;}
+.qs-box{background:#0B0F1A;border:1px solid #1E2D4A;border-radius:11px;padding:12px;margin-top:12px;}
+.qs-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;}
+.qs-lbl{font-size:.65rem;color:#64748B;}
+.qs-val{font-size:.92rem;font-weight:700;color:#fff;}
+.mstats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:8px 12px 12px;}
+.ms-val{font-size:.82rem;font-weight:700;color:#fff;text-align:center;}
+.ms-lbl{font-size:.6rem;color:#64748B;text-align:center;}
+.chat-wrap{padding:10px 12px;max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:7px;}
+.bu{background:#1D4ED8;border-radius:11px 11px 3px 11px;padding:8px 11px;font-size:.78rem;color:#fff;align-self:flex-end;max-width:88%;}
+.ba{background:#1E2D4A;border-radius:3px 11px 11px 11px;padding:8px 11px;font-size:.78rem;color:#E2E8F0;align-self:flex-start;max-width:92%;display:flex;gap:7px;}
+.stTextInput>div>div>input{background:#0B0F1A!important;color:#E2E8F0!important;border:1px solid #1E2D4A!important;border-radius:9px!important;font-family:'Inter',sans-serif!important;font-size:.85rem!important;padding:9px 13px!important;}
+.stTextInput label{color:#64748B!important;font-size:.7rem!important;font-weight:700!important;text-transform:uppercase!important;letter-spacing:.05em!important;}
+.stSelectbox>div>div{background:#0B0F1A!important;border:1px solid #1E2D4A!important;color:#E2E8F0!important;border-radius:9px!important;}
+.stSelectbox label{color:#64748B!important;font-size:.7rem!important;font-weight:700!important;text-transform:uppercase!important;}
+.stButton>button{background:linear-gradient(135deg,#1D4ED8,#3B82F6)!important;color:#fff!important;border:none!important;border-radius:9px!important;font-weight:700!important;font-size:.88rem!important;padding:11px!important;width:100%!important;}
+div[data-testid="stSidebar"]{display:none!important;}
+[data-testid="stMetric"]{background:#111827!important;border:1px solid #1E2D4A!important;border-radius:11px!important;padding:10px!important;}
+[data-testid="stMetricLabel"]{color:#64748B!important;font-size:.7rem!important;}
+[data-testid="stMetricValue"]{color:#fff!important;font-size:1.2rem!important;font-weight:700!important;}
+.element-container{margin:2px 0!important;}
+.stTabs [data-baseweb="tab-list"]{background:#111827!important;border-radius:9px!important;gap:3px!important;padding:3px!important;}
+.stTabs [data-baseweb="tab"]{background:transparent!important;border-radius:7px!important;color:#64748B!important;font-weight:600!important;font-size:.78rem!important;}
+.stTabs [aria-selected="true"]{background:#1D4ED8!important;color:#fff!important;}
 </style>
 """, unsafe_allow_html=True)
 
-# ── Database Setup ────────────────────────────────────────────
+# ── DB ──
 def init_db():
     conn = sqlite3.connect("onejourney.db")
     c = conn.cursor()
-    c.execute("""CREATE TABLE IF NOT EXISTS trips (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        source TEXT, destination TEXT, mode TEXT,
-        cost INTEGER, time_min INTEGER, distance_km REAL,
-        safety_score INTEGER, carbon_score INTEGER, timestamp TEXT
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS alerts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        type TEXT, message TEXT, severity TEXT, timestamp TEXT
-    )""")
-    c.execute("""CREATE TABLE IF NOT EXISTS user_prefs (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        pref_key TEXT UNIQUE, pref_value TEXT
-    )""")
-    c.execute("SELECT COUNT(*) FROM alerts")
-    if c.fetchone()[0] == 0:
-        seed_alerts = [
-            ("Traffic",  "Western Express Highway — heavy congestion near Andheri", "high",   str(datetime.now())),
-            ("Metro",    "Metro Line 2 delayed by 12 minutes at Dadar station",     "medium", str(datetime.now())),
-            ("Weather",  "Rain expected in next 2 hours — allow extra commute time","medium", str(datetime.now())),
-            ("Bus",      "Bus Route 45 running 8 minutes late from Kurla depot",    "low",    str(datetime.now())),
-            ("Metro",    "Metro Line 1 — normal operations resume",                 "low",    str(datetime.now())),
-        ]
-        c.executemany("INSERT INTO alerts VALUES (NULL,?,?,?,?)", seed_alerts)
-    conn.commit()
-    conn.close()
-
+    c.execute("""CREATE TABLE IF NOT EXISTS trips(id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source TEXT,destination TEXT,mode TEXT,cost INTEGER,time_min INTEGER,
+        distance_km REAL,safety_score INTEGER,carbon_score INTEGER,co2_saved_g REAL,timestamp TEXT)""")
+    c.execute("""CREATE TABLE IF NOT EXISTS alerts(id INTEGER PRIMARY KEY AUTOINCREMENT,
+        type TEXT,message TEXT,severity TEXT,city TEXT,timestamp TEXT)""")
+    if conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0]==0:
+        conn.executemany("INSERT INTO alerts VALUES(NULL,?,?,?,?,?)",[
+            ("Traffic","Heavy traffic on NH65 near Daund. Expect 20 min delay.","high","Maharashtra","10 min ago"),
+            ("Weather","Light rain expected in Pune after 2 PM. Carry umbrella.","medium","Pune","20 min ago"),
+            ("Transport","Metro Line 1 operating normally in Pune.","low","Pune","30 min ago"),
+            ("Bus","MSRTC bus services running on time today.","low","Maharashtra","45 min ago"),
+            ("Traffic","Western Express Hwy congested near Andheri — 20 min delay.","high","Mumbai","5 min ago"),
+            ("Metro","Mumbai Metro Line 2A delayed 12 min at Borivali East.","medium","Mumbai","15 min ago"),
+        ])
+    conn.commit(); conn.close()
 init_db()
 
-# ── Geocoding via Nominatim (OpenStreetMap — FREE, no key needed) ─
-def geocode(place_name):
-    """Returns (lat, lon) or None"""
+# ── Utils ──
+def haversine(lat1,lon1,lat2,lon2):
+    R=6371;d=math.radians
+    dlat,dlon=d(lat2-lat1),d(lon2-lon1)
+    a=math.sin(dlat/2)**2+math.cos(d(lat1))*math.cos(d(lat2))*math.sin(dlon/2)**2
+    return R*2*math.asin(math.sqrt(a))
+
+def geocode(name):
+    clean=name.strip().title()
+    for key,coords in CITIES.items():
+        if clean.lower() in key.lower() or key.lower() in clean.lower():
+            return coords,key
     try:
-        query = urllib.parse.quote(place_name + ", India")
-        url = f"https://nominatim.openstreetmap.org/search?q={query}&format=json&limit=1"
-        req = urllib.request.Request(url, headers={"User-Agent": "OneJourneyAI/1.0"})
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            data = json.loads(resp.read())
-            if data:
-                return float(data[0]["lat"]), float(data[0]["lon"])
-    except Exception:
-        pass
-    return None
+        q=urllib.parse.quote(name+", India")
+        url=f"https://nominatim.openstreetmap.org/search?q={q}&format=json&limit=1&countrycodes=in"
+        req=urllib.request.Request(url,headers={"User-Agent":"OneJourneyAI/2.0"})
+        with urllib.request.urlopen(req,timeout=6) as r:
+            data=json.loads(r.read())
+            if data: return (float(data[0]["lat"]),float(data[0]["lon"])),data[0].get("display_name","").split(",")[0]
+    except: pass
+    return None,None
 
-# ── Haversine Distance ────────────────────────────────────────
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371
-    dlat = math.radians(lat2 - lat1)
-    dlon = math.radians(lon2 - lon1)
-    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1))*math.cos(math.radians(lat2))*math.sin(dlon/2)**2
-    return R * 2 * math.asin(math.sqrt(a))
+def get_city_type(name):
+    n=name.lower()
+    if any(k in n for k in ["mumbai","thane","navi mumbai","borivali","andheri","bandra","dadar","churchgate","cst","kurla","ghatkopar","mulund","kalyan","panvel","vasai","virar","mira road","vashi","belapur"]): return "Mumbai"
+    if any(k in n for k in ["pune","pimpri","chinchwad","shivajinagar","kothrud","hadapsar","viman nagar","hinjewadi","wakad","baner","aundh","kharadi","magarpatta","camp","swargate"]): return "Pune"
+    return "Other"
 
-# ── Dynamic Route Engine ──────────────────────────────────────
-def calculate_routes(distance_km, time_of_day="morning"):
-    """
-    Realistic route calculation based on actual distance.
-    All fares/times scaled from real Indian transport data.
-    """
-    d = distance_km
-    is_night = "night" in time_of_day.lower()
+def fmt_time(m): return f"{m//60}h {m%60:02d}m" if m>=60 else f"{m} min"
 
-    # Base safety modifier for night
-    night_penalty = -10 if is_night else 0
+def build_routes(d,src_name,dst_name,time_pref="morning"):
+    is_night="night" in time_pref.lower(); is_eve="evening" in time_pref.lower()
+    surge=1.5 if is_night else (1.2 if is_eve else 1.0)
+    city=get_city_type(src_name); np=-10 if is_night else 0
+    # intercity check
+    ic=None
+    for (a,b),rts in INTERCITY_ROUTES.items():
+        sa,sb=src_name.lower(),dst_name.lower()
+        if (a.lower() in sa or sa in a.lower()) and (b.lower() in sb or sb in b.lower()): ic=rts;break
+        if (b.lower() in sa or sa in b.lower()) and (a.lower() in sb or sb in a.lower()): ic=rts;break
+    if ic or d>60:
+        if ic:
+            routes=[]
+            for r in ic:
+                cost=round(r["fare"]*surge) if "Cab" in r["mode"] else r["fare"]
+                cs=next((100-v for k,v in CARBON_PER_KM.items() if k.lower() in r["mode"].lower()),40)
+                routes.append({**r,"cost":cost,"time":r["time_min"],"carbon_score":max(10,cs),
+                    "safety_score":88,"desc":f"~{round(d)}km intercity","best":False,"co2":0,
+                    "carbon":r.get("carbon","Good"),"safety":r.get("safety","High")})
+        else:
+            routes=[
+                {"mode":"🚌 State Bus (MSRTC)","cost":round(d*1.2/10)*10,"time":round(d*6.5),
+                 "safety":"High","safety_score":85,"carbon":"Good","carbon_score":72,
+                 "desc":f"~{d:.0f}km • {round(d*6.5/60,1)}hrs","best":False,"co2":0},
+                {"mode":"🚆 Indian Railways","cost":round(d*0.75/10)*10,"time":round(d*5.2),
+                 "safety":"High","safety_score":88,"carbon":"Excellent","carbon_score":90,
+                 "desc":f"~{d:.0f}km • {round(d*5.2/60,1)}hrs","best":False,"co2":0},
+                {"mode":"🚗 Cab (Outstation)","cost":round(d*18*surge/100)*100,"time":round(d*3.2),
+                 "safety":"High","safety_score":91,"carbon":"Poor","carbon_score":22,
+                 "desc":f"AC cab • {round(d*3.2/60,1)}hrs • surge {surge}x","best":False,"co2":0},
+            ]
+        bi=min(range(len(routes)),key=lambda i:routes[i]["cost"]*.4+routes[i]["time"]*.3+(100-routes[i].get("safety_score",80))*.15+(100-routes[i].get("carbon_score",40))*.15)
+        routes[bi]["best"]=True; return routes,"intercity"
+    routes=[]
+    if city=="Mumbai" and d>=3:
+        lt=max(5,min(55,round(d*1.8/5)*5))
+        routes.append({"mode":"🚉 Mumbai Local Train","cost":lt,"time":round(d*2.5+10),
+            "safety":"High" if not is_night else "Medium","safety_score":max(55,88+np),
+            "carbon":"Excellent","carbon_score":92,"desc":"Western/Central/Harbour • very frequent","best":False,
+            "co2":round((CARBON_PER_KM["Cab"]-CARBON_PER_KM["Local Train"])*d)})
+    if d>=2:
+        mf=max(10,min(60,round(d*2.3/5)*5))
+        ml="🚇 Mumbai Metro" if city=="Mumbai" else ("🚇 Pune Metro" if city=="Pune" else "🚇 Metro")
+        routes.append({"mode":ml+" + Walk","cost":mf,"time":round(d*2.6+8),
+            "safety":"High","safety_score":min(95,92+np),"carbon":"Excellent","carbon_score":93,
+            "desc":f"Metro ({round(d*.85,1)}km)+{round(d*.15*13)}min walk","best":False,
+            "co2":round((CARBON_PER_KM["Cab"]-CARBON_PER_KM["Metro"])*d)})
+    bl="🚌 BEST Bus" if city=="Mumbai" else ("🚌 PMC Bus" if city=="Pune" else "🚌 City Bus")
+    routes.append({"mode":bl,"cost":max(8,round(d*1.9/5)*5),"time":round(d*4.8+12),
+        "safety":"Medium" if is_night else "High","safety_score":max(55,75+np),
+        "carbon":"Good","carbon_score":78,"desc":"Govt bus • cheapest option","best":False,
+        "co2":round((CARBON_PER_KM["Cab"]-CARBON_PER_KM["Bus"])*d)})
+    routes.append({"mode":"🛵 Bike Taxi (Rapido)","cost":max(25,round(d*7.5/5)*5),"time":round(d*2+3),
+        "safety":"High","safety_score":min(88,85+np),"carbon":"Average","carbon_score":52,
+        "desc":"Fastest 2-wheeler • no traffic jams","best":False,
+        "co2":round((CARBON_PER_KM["Cab"]-CARBON_PER_KM["Bike Taxi"])*d)})
+    ab=25 if city=="Pune" else 23; ap=13 if city=="Pune" else 14.5
+    routes.append({"mode":"🛺 Auto Rickshaw","cost":max(30,round((ab+d*ap)/5)*5),
+        "time":round(d*3+5),"safety":"High","safety_score":min(90,88+np),
+        "carbon":"Poor","carbon_score":32,"desc":f"₹{ab} base+₹{ap}/km metered","best":False,"co2":0})
+    cf=round((50+d*(13 if city=="Pune" else 15))*surge/10)*10
+    routes.append({"mode":"🚗 Cab (Ola/Uber)","cost":max(80,cf),"time":round(d*2.7+6),
+        "safety":"High","safety_score":92,"carbon":"Poor","carbon_score":22,
+        "desc":f"AC cab•{'🌙'+str(surge)+'x surge' if surge>1 else 'no surge'}","best":False,"co2":0})
+    if d<=2.5:
+        routes.append({"mode":"🚶 Walk","cost":0,"time":round(d*14),
+            "safety":"Medium" if is_night else "High","safety_score":max(55,65+np),
+            "carbon":"Excellent","carbon_score":100,"desc":f"~{round(d*1000)}m•free•healthy 💪","best":False,
+            "co2":round(CARBON_PER_KM["Cab"]*d)})
+    def ws(r): return r["cost"]*.35+r["time"]*.30+(100-r["safety_score"])*.20+(100-r["carbon_score"])*.15
+    routes[min(range(len(routes)),key=lambda i:ws(routes[i]))]["best"]=True
+    return routes,"city"
 
-    routes = []
-
-    # ── 1. Metro + Walk (if distance > 3 km, metro makes sense)
-    if d >= 2:
-        metro_fare = max(10, min(60, round((d * 2.5) / 5) * 5))   # ₹10–60 slab
-        metro_time = round(d * 2.8 + 8)                            # 8 min buffer
-        routes.append({
-            "mode": "🚇 Metro + Walk",
-            "cost": metro_fare,
-            "time": metro_time,
-            "safety": "High",
-            "safety_score": min(95, 90 + night_penalty),
-            "carbon": "Excellent",
-            "carbon_score": 95,
-            "best": False,
-            "color": "#1565C0",
-            "desc": f"Metro ({round(d*0.85, 1)} km) + {round(d*0.15*12)} min walk • Fastest & Eco-Friendly"
-        })
-
-    # ── 2. Bus
-    bus_fare = max(10, round(d * 1.8 / 5) * 5)
-    bus_time = round(d * 4.5 + 10)
-    routes.append({
-        "mode": "🚌 City Bus",
-        "cost": bus_fare,
-        "time": bus_time,
-        "safety": "Medium" if is_night else "High",
-        "safety_score": max(55, 75 + night_penalty),
-        "carbon": "Good",
-        "carbon_score": 80,
-        "best": False,
-        "color": "#E65100",
-        "desc": f"BEST/MSRTC bus route • Cheapest option • {bus_time} mins avg"
-    })
-
-    # ── 3. Bike Taxi (Rapido)
-    bike_fare = max(30, round(d * 8 / 5) * 5)
-    bike_time = round(d * 2.2 + 3)
-    routes.append({
-        "mode": "🛵 Bike Taxi (Rapido)",
-        "cost": bike_fare,
-        "time": bike_time,
-        "safety": "High",
-        "safety_score": min(88, 85 + night_penalty),
-        "carbon": "Average",
-        "carbon_score": 55,
-        "best": False,
-        "color": "#6A1B9A",
-        "desc": f"Rapido/OlaBike • Fastest 2-wheeler • No traffic jams"
-    })
-
-    # ── 4. Auto Rickshaw
-    auto_fare = max(30, round((25 + d * 12) / 5) * 5)
-    auto_time = round(d * 3.2 + 5)
-    routes.append({
-        "mode": "🛺 Auto Rickshaw",
-        "cost": auto_fare,
-        "time": auto_time,
-        "safety": "High",
-        "safety_score": min(90, 88 + night_penalty),
-        "carbon": "Poor",
-        "carbon_score": 30,
-        "best": False,
-        "color": "#00695C",
-        "desc": f"Metered auto • Door-to-door • Negotiate or use app"
-    })
-
-    # ── 5. Cab (Ola/Uber)
-    cab_fare = max(80, round((50 + d * 14) / 10) * 10)
-    cab_time = round(d * 2.8 + 7)
-    surge = 1.4 if is_night else 1.0
-    cab_fare = round(cab_fare * surge / 10) * 10
-    routes.append({
-        "mode": "🚗 Cab (Ola/Uber)",
-        "cost": cab_fare,
-        "time": cab_time,
-        "safety": "High",
-        "safety_score": 92,
-        "carbon": "Poor",
-        "carbon_score": 25,
-        "best": False,
-        "color": "#B71C1C",
-        "desc": f"AC cab • {'1.4x surge at night • ' if is_night else ''}Most comfortable"
-    })
-
-    # ── 6. Long distance (if > 80 km — intercity)
-    if d > 80:
-        bus_long_fare = round(d * 1.2 / 10) * 10
-        bus_long_time = round(d * 7)  # minutes
-        train_fare = round(d * 0.8 / 10) * 10
-        train_time = round(d * 5.5)
-        routes = [
-            {
-                "mode": "🚌 State Bus (MSRTC/GSRTC)",
-                "cost": bus_long_fare,
-                "time": bus_long_time,
-                "safety": "High",
-                "safety_score": 85,
-                "carbon": "Good",
-                "carbon_score": 75,
-                "best": False,
-                "color": "#E65100",
-                "desc": f"Direct state bus • ₹{bus_long_fare} • ~{round(bus_long_time/60, 1)} hrs"
-            },
-            {
-                "mode": "🚆 Train (Indian Railways)",
-                "cost": train_fare,
-                "time": train_time,
-                "safety": "High",
-                "safety_score": 88,
-                "carbon": "Excellent",
-                "carbon_score": 90,
-                "best": False,
-                "color": "#1565C0",
-                "desc": f"Passenger/Express train • ₹{train_fare} • ~{round(train_time/60, 1)} hrs"
-            },
-            {
-                "mode": "🚗 Cab (Ola/Uber Outstation)",
-                "cost": round(d * 18 / 100) * 100,
-                "time": round(d * 3.5),
-                "safety": "High",
-                "safety_score": 90,
-                "carbon": "Poor",
-                "carbon_score": 20,
-                "best": False,
-                "color": "#B71C1C",
-                "desc": f"Outstation cab • One-way • Most comfortable"
-            },
-        ]
-
-    # ── AI picks best route (lowest weighted score) ──
-    def score(r):
-        return r["cost"] * 0.4 + r["time"] * 0.3 + (100 - r["safety_score"]) * 0.15 + (100 - r["carbon_score"]) * 0.15
-    best_idx = min(range(len(routes)), key=lambda i: score(routes[i]))
-    routes[best_idx]["best"] = True
-
-    return routes
-
-# ── AI Assistant Call ─────────────────────────────────────────
-def ask_ai(messages, source="", destination="", distance_km=0, routes=[]):
-    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
-    route_summary = "\n".join([
-        f"- {r['mode']}: ₹{r['cost']}, {r['time']} min, Safety: {r['safety']}, Carbon: {r['carbon']}"
-        for r in routes
-    ]) if routes else "No route calculated yet."
-
-    system = f"""You are OneJourney AI — India's smartest urban mobility assistant for the OneJourney Mobility Hackathon 2026.
-You help commuters find best routes across Metro, Bus, Bike Taxi, Auto, and Cab.
-
-Current journey context:
-- From: {source or 'Not set'}
-- To: {destination or 'Not set'}
-- Distance: {round(distance_km, 1)} km
-- Available routes:
-{route_summary}
-
-For every query:
-1. Give a direct, friendly recommendation
-2. Mention cost (₹), time (mins), safety & carbon impact
-3. Add one smart commute tip
-4. Support Hindi/English/Marathi queries naturally
-5. If asked about safety at night, always recommend cab or metro
-Keep replies under 120 words. Be warm and helpful like a smart friend."""
-
+def ask_ai(messages,src="",dst="",dist=0,routes=[],time_pref=""):
+    api_key=os.environ.get("ANTHROPIC_API_KEY","")
+    rt="\n".join([f"- {r['mode']}: ₹{r['cost']}, {r['time']}min, Safety:{r.get('safety_score','?')}/100, Carbon:{r.get('carbon_score','?')}/100{'  ⭐BEST' if r.get('best') else ''}" for r in routes]) if routes else "No routes yet."
+    system=f"""You are OneJourney AI — smart urban mobility assistant for India.
+Journey: {src} → {dst} | Distance: {round(dist,1)}km | Time: {time_pref}
+Routes:\n{rt}
+Reply same language as user (Hindi/English/Marathi). Under 80 words. Warm & specific."""
     if api_key:
         try:
-            client = anthropic.Anthropic(api_key=api_key)
-            response = client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=300,
-                system=system,
-                messages=[{"role": m["role"], "content": m["content"]} for m in messages]
-            )
-            return response.content[0].text
-        except Exception as e:
-            return f"⚠️ API error: {str(e)[:80]}"
-    else:
-        # Smart fallback without API key
-        last = messages[-1]["content"].lower()
-        if any(w in last for w in ["cheap", "budget", "₹", "rs", "sasta"]):
-            rec = min(routes, key=lambda r: r["cost"]) if routes else None
-            if rec:
-                return f"💰 Cheapest option is **{rec['mode']}** at ₹{rec['cost']} taking {rec['time']} mins! Great choice for saving money. 🌿 Carbon: {rec['carbon']}\n\n💡 Tip: Book in advance for better fares!"
-        if any(w in last for w in ["fast", "quick", "jaldi", "urgent", "hurry"]):
-            rec = min(routes, key=lambda r: r["time"]) if routes else None
-            if rec:
-                return f"⚡ Fastest option is **{rec['mode']}** — only {rec['time']} mins! Costs ₹{rec['cost']}.\n\n💡 Tip: Leave 5 mins early to avoid last-minute rush!"
-        if any(w in last for w in ["safe", "night", "raat", "alone", "girl", "women"]):
-            safe = max(routes, key=lambda r: r["safety_score"]) if routes else None
-            if safe:
-                return f"🛡️ Safest option is **{safe['mode']}** with Safety Score {safe['safety_score']}/100. Always share your live location with family!\n\n💡 Tip: Use the SOS feature in the app if needed."
-        if any(w in last for w in ["green", "eco", "carbon", "environment", "planet"]):
-            green = max(routes, key=lambda r: r["carbon_score"]) if routes else None
-            if green:
-                return f"🌿 Greenest choice is **{green['mode']}** with Carbon Score {green['carbon_score']}/100! You'll save CO₂ and earn Green Points 🏆\n\n💡 Tip: Choosing metro daily saves ~12 kg CO₂/month!"
-        best = next((r for r in routes if r.get("best")), routes[0] if routes else None)
-        if best:
-            return f"🤖 Best overall option: **{best['mode']}** — ₹{best['cost']}, {best['time']} mins, Safety: {best['safety']}, Carbon: {best['carbon']}.\n\n💡 Set your ANTHROPIC_API_KEY for full AI-powered responses!"
-        return "🤖 Please use the Route Planner first to calculate your journey, then I can give personalized advice! Set ANTHROPIC_API_KEY for full AI."
+            client=anthropic.Anthropic(api_key=api_key)
+            resp=client.messages.create(model="claude-sonnet-4-6",max_tokens=250,system=system,
+                messages=[{"role":m["role"],"content":m["content"]} for m in messages])
+            return resp.content[0].text
+        except Exception as e: return f"⚠️ {str(e)[:50]}"
+    q=messages[-1]["content"].lower()
+    best=next((r for r in routes if r.get("best")),routes[0] if routes else None)
+    cheap=min(routes,key=lambda r:r["cost"]) if routes else None
+    fast=min(routes,key=lambda r:r["time"]) if routes else None
+    if any(w in q for w in ["cheap","budget","sasta","₹","less"]) and cheap:
+        return f"💰 Cheapest: **{cheap['mode']}** — ₹{cheap['cost']} ({cheap['time']} min)!\n💡 Book monthly pass for 40% savings!"
+    if any(w in q for w in ["fast","quick","jaldi","urgent"]) and fast:
+        return f"⚡ Fastest: **{fast['mode']}** — {fast['time']} min! Costs ₹{fast['cost']}.\n💡 Leave 5 min early!"
+    if any(w in q for w in ["safe","night","raat","women"]):
+        sf=max(routes,key=lambda r:r["safety_score"]) if routes else None
+        if sf: return f"🛡️ Safest: **{sf['mode']}** — Safety {sf['safety_score']}/100.\n💡 Always share live location at night!"
+    if any(w in q for w in ["time","best","when","early","morning"]) and dist>50:
+        return "🕐 Early morning (5–7 AM) is ideal for road travel. For buses/trains, mid-morning offers better punctuality and availability."
+    if best: return f"🤖 Best overall: **{best['mode']}** — ₹{best['cost']}, {best['time']} min.\n💡 Set ANTHROPIC_API_KEY for full AI!"
+    return "🤖 Use Route Planner first, then I'll give personalized advice!"
 
-# ── Sidebar ───────────────────────────────────────────────────
-with st.sidebar:
-    st.markdown("""
-    <div style='text-align:center; padding:0.8rem 0 0.4rem;'>
-        <div style='font-size:2.2rem;'>🚇</div>
-        <div style='font-size:1.2rem; font-weight:700; color:#FFF;'>OneJourney AI</div>
-        <div style='font-size:0.75rem; color:#00B4D8;'>Unified Mobility Super App</div>
-    </div>""", unsafe_allow_html=True)
-    st.markdown("---")
-    page = st.radio("📍 Navigate", [
-        "🏠 Home", "🗺️ Route Planner", "🤖 AI Assistant",
-        "🛡️ Safety & Carbon", "🔔 Live Alerts", "📊 My Dashboard"
-    ])
-    st.markdown("---")
-    st.markdown("""
-    <div style='font-size:0.75rem; color:#94A3B8; text-align:center;'>
-        🐺 Night Wolf &nbsp;|&nbsp; <b style='color:#fff;'>Deepak Tandale</b><br>
-        SSIEMS Parbhani • Dr. BATU Lonere
-    </div>""", unsafe_allow_html=True)
+def micon(mode):
+    if "Local Train" in mode or "Railway" in mode: return "🚉","ib"
+    if "Metro" in mode: return "🚇","ip"
+    if "Bus" in mode: return "🚌","io"
+    if "Bike" in mode: return "🛵","it"
+    if "Auto" in mode: return "🛺","ig"
+    if "Cab" in mode: return "🚗","ir"
+    if "Walk" in mode: return "🚶","ig"
+    return "🚌","ib"
 
-# ── Hero Banner ───────────────────────────────────────────────
-st.markdown("""
-<div class='hero-banner'>
-    <div class='hero-title'>🚇 OneJourney AI</div>
-    <div class='hero-sub'>Unified Mobility Super App</div>
-    <div class='hero-tag'>"One Search. Every Journey."</div>
-    <div style='margin-top:0.6rem;'>
-        <span class='transport-pill'>🚇 Metro</span>
-        <span class='transport-pill'>🚌 Bus</span>
-        <span class='transport-pill'>🛵 Bike Taxi</span>
-        <span class='transport-pill'>🛺 Auto</span>
-        <span class='transport-pill'>🚗 Cab</span>
-        <span class='transport-pill'>🚆 Train</span>
-    </div>
+# ── Session ──
+if "page"       not in st.session_state: st.session_state.page="Route Planner"
+if "messages"   not in st.session_state: st.session_state.messages=[
+    {"role":"user","content":"What is the best time to travel from Parbhani to Pune?"},
+    {"role":"assistant","content":"Based on current traffic and transport data, early morning (5 AM – 7 AM) is ideal for road travel. For buses and trains, mid-morning offers better punctuality and availability."}]
+if "routes"     not in st.session_state: st.session_state.routes=[]
+if "last_src"   not in st.session_state: st.session_state.last_src=""
+if "last_dst"   not in st.session_state: st.session_state.last_dst=""
+if "last_dist"  not in st.session_state: st.session_state.last_dist=0
+if "src_coords" not in st.session_state: st.session_state.src_coords=None
+if "dst_coords" not in st.session_state: st.session_state.dst_coords=None
+if "searched"   not in st.session_state: st.session_state.searched=False
+
+# ── NAVBAR ──
+st.markdown("""<div class="navbar">
+<div style="display:flex;align-items:center;gap:10px;">
+  <div class="nav-logo">🚇</div>
+  <div><div class="nav-title">OneJourney <span>AI</span></div><div class="nav-sub">Your Smart Mobility Companion</div></div>
+</div>
+<div class="nav-right">
+  <div style="display:flex;align-items:center;gap:8px;">
+    <span style="font-size:1.3rem;">☀️</span>
+    <div><div class="nav-weather-temp">28°C</div><div class="nav-weather-city">Mumbai</div></div>
+  </div>
+  <div class="nav-bell">🔔<div class="nav-badge">3</div></div>
+  <div style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+    <div class="nav-avatar">D</div>
+    <div><div class="nav-uname">Deepak</div><div class="nav-urole">Student</div></div>
+    <span style="color:#64748B;font-size:.75rem;">▾</span>
+  </div>
+</div>
 </div>""", unsafe_allow_html=True)
 
-# ══════════════════════════════════════════
-# PAGE: HOME
-# ══════════════════════════════════════════
-if page == "🏠 Home":
-    c1,c2,c3,c4 = st.columns(4)
-    metrics = [
-        ("500M+", "Urban Commuters in India", "#00B4D8"),
-        ("₹500+", "Monthly Savings / Commuter", "#FFB300"),
-        ("30%",   "Lower Carbon Emissions",    "#66BB6A"),
-        ("40%",   "Faster Commute Decisions",  "#EF5350"),
-    ]
-    for col, (val, label, color) in zip([c1,c2,c3,c4], metrics):
-        with col:
-            st.markdown(f"""<div class='metric-card'>
-                <div class='metric-value' style='color:{color};'>{val}</div>
-                <div class='metric-label'>{label}</div>
-            </div>""", unsafe_allow_html=True)
+# ── LAYOUT: 4 columns ──
+sb, lp, cp, rp = st.columns([1.1, 1.55, 3.6, 1.9])
 
-    st.markdown("<div class='section-header'>🚨 The Problem We Solve</div>", unsafe_allow_html=True)
-    p1,p2 = st.columns(2)
-    with p1:
-        st.error("😤 Commuters juggle 5+ apps — Google Maps, Metro App, Bus App, Uber, Rapido")
-        st.error("⏱️ Wasted time comparing options across multiple platforms manually")
-    with p2:
-        st.error("💸 Poor decisions lead to higher travel costs every single day")
-        st.error("😰 No single view combining safety + cost + carbon for best route")
+# ══════════════════════════════════
+# SIDEBAR
+# ══════════════════════════════════
+with sb:
+    nav_items=[("🗺️","Route Planner"),("🤖","AI Assistant"),("🔔","Live Alerts"),
+               ("📊","Dashboard"),("📅","Trip History"),("⚙️","Preferences"),("ℹ️","About Us")]
+    nav_html="".join([f'<div class="sbitem {"active" if st.session_state.page==l else ""}">{ic} {l}</div>' for ic,l in nav_items])
+    conn=sqlite3.connect("onejourney.db")
+    stats=conn.execute("SELECT COUNT(*),SUM(co2_saved_g) FROM trips").fetchone()
+    conn.close()
+    co2=round((stats[1] or 0)/1000,1); trips_n=stats[0] or 0
+    st.markdown(f"""<div style="height:calc(100vh - 68px);display:flex;flex-direction:column;padding:10px 6px;background:#111827;border-right:1px solid #1E2D4A;overflow-y:auto;">
+<div style="flex:1;">{nav_html}</div>
+<div class="impact-box">
+  <div style="font-size:.72rem;font-weight:700;color:#10B981;margin-bottom:8px;">🌿 Our Impact</div>
+  <div class="irow"><div class="iicon" style="background:rgba(16,185,129,.15);">♻️</div><div><div class="ival" style="color:#10B981;">{co2} kg</div><div class="ilbl">Carbon Saved CO₂</div></div></div>
+  <div class="irow"><div class="iicon" style="background:rgba(59,130,246,.15);">⏱️</div><div><div class="ival" style="color:#3B82F6;">12.4 hrs</div><div class="ilbl">Time Saved</div></div></div>
+  <div class="irow"><div class="iicon" style="background:rgba(245,158,11,.15);">💰</div><div><div class="ival" style="color:#F59E0B;">₹1,250</div><div class="ilbl">Money Saved</div></div></div>
+</div>
+<div style="display:flex;align-items:center;gap:8px;padding:10px 8px;border-radius:9px;background:linear-gradient(135deg,#1E2D4A,#0F172A);margin-top:8px;border:1px solid #1E2D4A;">
+  <div style="font-size:1.8rem;">🐺</div>
+  <div><div style="font-size:.8rem;font-weight:700;color:#fff;">Night Wolf</div><div style="font-size:.65rem;color:#3B82F6;">Building the future of smart mobility 💙</div></div>
+</div>
+</div>""", unsafe_allow_html=True)
 
-    st.markdown("<div class='section-header'>💡 OneJourney AI Solution</div>", unsafe_allow_html=True)
-    s1,s2,s3 = st.columns(3)
-    with s1: st.success("🤖 **AI Assistant** — Natural language journey planning")
-    with s2: st.success("🛡️ **Safety Score** — Routes ranked by real safety factors")
-    with s3: st.success("🌿 **Carbon Score** — Eco options with Green Points rewards")
-    f1,f2 = st.columns(2)
-    with f1: st.info("🔔 **Smart Alerts** — Real-time traffic, metro & weather alerts")
-    with f2: st.info("📈 **Personalization** — AI learns your budget & preferences")
+# ══════════════════════════════════
+# LEFT PANEL — Form
+# ══════════════════════════════════
+with lp:
+    st.markdown('<div style="height:calc(100vh - 68px);overflow-y:auto;padding:14px 12px;background:#111827;border-right:1px solid #1E2D4A;">', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:3px;">Plan Your Journey</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size:.72rem;color:#64748B;margin-bottom:14px;">Find the best way to travel with AI-powered recommendations</div>', unsafe_allow_html=True)
 
-# ══════════════════════════════════════════
-# PAGE: ROUTE PLANNER
-# ══════════════════════════════════════════
-elif page == "🗺️ Route Planner":
-    st.markdown("<div class='section-header'>🗺️ Smart Route Planner</div>", unsafe_allow_html=True)
-    st.markdown("<p style='color:#94A3B8; font-size:0.85rem;'>🌍 Uses OpenStreetMap geocoding to calculate real distance between any two Indian cities/locations</p>", unsafe_allow_html=True)
+    src_val = st.text_input("FROM", value=st.session_state.last_src or "Parbhani, Maharashtra, India", key="src_inp")
+    dst_val = st.text_input("TO",   value=st.session_state.last_dst or "Pune, Maharashtra, India",    key="dst_inp")
+    date_v  = st.selectbox("TRAVEL DATE",["13 June 2025","14 June 2025","Today"], key="date_inp")
+    time_v  = st.selectbox("DEPARTURE TIME",["09:00 AM","Morning (6–10 AM)","Afternoon","Evening (5–9 PM)","Night (After 9 PM)"], key="time_inp")
+    pref_v  = st.selectbox("PREFERENCES",["Balanced (Time + Cost)","Fastest","Cheapest","Safest","Eco-Friendly"], key="pref_inp")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        source = st.text_input("📍 From", placeholder="e.g. Parbhani, Maharashtra")
-    with col2:
-        destination = st.text_input("🎯 To", placeholder="e.g. Pune, Maharashtra")
-
-    c1,c2,c3 = st.columns(3)
-    with c1:
-        budget = st.selectbox("💰 Max Budget", ["Any", "Under ₹50", "Under ₹150", "Under ₹500", "Under ₹2000"])
-    with c2:
-        priority = st.selectbox("⚡ Priority", ["Balanced", "Fastest", "Cheapest", "Safest", "Greenest"])
-    with c3:
-        time_pref = st.selectbox("🕐 Departing", ["Now (Morning)", "Afternoon", "Evening", "Night (After 9 PM)"])
-
-    if st.button("🔍 Find Best Routes", use_container_width=True):
-        if source and destination:
-            with st.spinner("🌍 Fetching real coordinates via OpenStreetMap..."):
-                src_coords  = geocode(source)
-                dst_coords  = geocode(destination)
-
-            if src_coords and dst_coords:
-                distance_km = haversine(*src_coords, *dst_coords)
-                # Store in session for AI
-                st.session_state["last_src"]  = source
-                st.session_state["last_dst"]  = destination
-                st.session_state["last_dist"] = distance_km
-                st.session_state["last_coords_src"] = src_coords
-                st.session_state["last_coords_dst"] = dst_coords
-
-                routes = calculate_routes(distance_km, time_pref)
-                st.session_state["last_routes"] = routes
-
-                # Filter by budget
-                budget_map = {"Under ₹50":50, "Under ₹150":150, "Under ₹500":500, "Under ₹2000":2000}
-                if budget in budget_map:
-                    routes = [r for r in routes if r["cost"] <= budget_map[budget]] or routes
-
-                # Sort by priority
-                sort_map = {
-                    "Fastest":  lambda r: r["time"],
-                    "Cheapest": lambda r: r["cost"],
-                    "Safest":   lambda r: -r["safety_score"],
-                    "Greenest": lambda r: -r["carbon_score"],
-                }
-                if priority in sort_map:
-                    routes = sorted(routes, key=sort_map[priority])
-
-                st.success(f"📍 **{source}** → **{destination}** &nbsp;|&nbsp; 📏 Distance: **{distance_km:.1f} km** (Real OpenStreetMap data)")
-
-                st.markdown(f"<div class='section-header'>🏆 Routes Found</div>", unsafe_allow_html=True)
-                best_route = next((r for r in routes if r.get("best")), routes[0])
-
-                for r in routes:
-                    sc = "badge-green" if r["safety"]=="High" else "badge-yellow"
-                    cc = "badge-green" if r["carbon"]=="Excellent" else ("badge-yellow" if r["carbon"] in ["Good","Average"] else "badge-red")
-                    card_cls = "route-card best" if r.get("best") else "route-card"
-                    star = " ⭐ AI Recommended" if r.get("best") else ""
-                    st.markdown(f"""
-                    <div class='{card_cls}'>
-                        <div class='route-title'>{r['mode']}{star}</div>
-                        <div class='route-meta'>{r['desc']}</div>
-                        <div style='margin-top:0.5rem;'>
-                            <span style='color:#FFB300; font-weight:700;'>₹{r['cost']}</span> &nbsp;•&nbsp;
-                            <span style='color:#00B4D8;'>⏱ {r['time']} min</span> &nbsp;•&nbsp;
-                            <span class='badge {sc}'>🛡 {r['safety']} Safety ({r['safety_score']}/100)</span> &nbsp;
-                            <span class='badge {cc}'>🌿 {r['carbon']} ({r['carbon_score']}/100)</span>
-                        </div>
-                    </div>""", unsafe_allow_html=True)
-
-                cab_cost = next((r["cost"] for r in routes if "Cab" in r["mode"]), None)
-                best_cost = best_route["cost"]
-                savings = cab_cost - best_cost if cab_cost and cab_cost > best_cost else 0
-                st.success(f"🤖 **AI Recommends:** {best_route['mode']} — ₹{best_route['cost']}, {best_route['time']} min" + (f" • Save ₹{savings} vs cab!" if savings > 0 else ""))
-
-                # Save trip to DB
-                conn = sqlite3.connect("onejourney.db")
-                conn.execute("INSERT INTO trips VALUES (NULL,?,?,?,?,?,?,?,?,?)", (
-                    source, destination, best_route["mode"],
-                    best_route["cost"], best_route["time"], round(distance_km,2),
-                    best_route["safety_score"], best_route["carbon_score"], str(datetime.now())
-                ))
-                conn.commit(); conn.close()
-
-                # Map with real coordinates
-                st.markdown("<div class='section-header'>🗺️ Real Route Map (OpenStreetMap)</div>", unsafe_allow_html=True)
-                mid_lat = (src_coords[0] + dst_coords[0]) / 2
-                mid_lon = (src_coords[1] + dst_coords[1]) / 2
-                zoom = 10 if distance_km < 50 else (7 if distance_km < 300 else 5)
-                m = folium.Map(location=[mid_lat, mid_lon], zoom_start=zoom, tiles="CartoDB dark_matter")
-
-                folium.Marker(list(src_coords),  popup=f"📍 {source}",      icon=folium.Icon(color="blue",  icon="home")).add_to(m)
-                folium.Marker(list(dst_coords),  popup=f"🎯 {destination}", icon=folium.Icon(color="red",   icon="flag")).add_to(m)
-                folium.PolyLine([list(src_coords), list(dst_coords)], color="#00B4D8", weight=4, opacity=0.8,
-                                tooltip=f"{best_route['mode']} • {distance_km:.1f} km • {best_route['time']} min").add_to(m)
-
-                # Distance circle
-                folium.Circle(list(src_coords), radius=500, color="#00B4D8", fill=True, fill_opacity=0.15).add_to(m)
-                folium.Circle(list(dst_coords), radius=500, color="#EF5350", fill=True, fill_opacity=0.15).add_to(m)
-
-                st_folium(m, width=None, height=400)
-            else:
-                st.error("❌ Could not find one or both locations. Try adding city/state name (e.g. 'Parbhani, Maharashtra')")
+    if st.button("🔍 Find Best Routes", key="find_btn"):
+        with st.spinner("Calculating..."):
+            sc,sl=geocode(src_val); dc,dl=geocode(dst_val)
+        if sc and dc:
+            dist=haversine(*sc,*dc)
+            routes,rtype=build_routes(dist,src_val,dst_val,time_v)
+            st.session_state.update({"routes":routes,"last_src":src_val,"last_dst":dst_val,
+                "last_dist":dist,"src_coords":sc,"dst_coords":dc,"rtype":rtype,"searched":True})
+            best=next((r for r in routes if r.get("best")),routes[0])
+            conn=sqlite3.connect("onejourney.db")
+            conn.execute("INSERT INTO trips VALUES(NULL,?,?,?,?,?,?,?,?,?,?)",(
+                src_val,dst_val,best["mode"],best["cost"],best["time"],
+                round(dist,2),best.get("safety_score",85),best.get("carbon_score",50),
+                best.get("co2",0),str(datetime.now())))
+            conn.commit(); conn.close()
+            st.rerun()
         else:
-            st.warning("Please enter both source and destination!")
+            st.error("❌ Location not found. Add state name e.g. 'Pune, Maharashtra'")
 
-# ══════════════════════════════════════════
-# PAGE: AI ASSISTANT
-# ══════════════════════════════════════════
-elif page == "🤖 AI Assistant":
-    st.markdown("<div class='section-header'>🤖 AI Commute Assistant</div>", unsafe_allow_html=True)
-    st.markdown("<p style='color:#94A3B8;'>Ask in Hindi, English, or Marathi! Use Route Planner first for best results.</p>", unsafe_allow_html=True)
+    if st.session_state.searched and st.session_state.routes:
+        routes=st.session_state.routes
+        mc=min(r["cost"] for r in routes); mt=min(r["time"] for r in routes)
+        dk=st.session_state.last_dist
+        st.markdown(f"""<div class="qs-box">
+<div style="font-size:.72rem;font-weight:700;color:#94A3B8;">Quick Stats</div>
+<div class="qs-grid">
+  <div><div class="qs-lbl">📏 Distance</div><div class="qs-val">{round(dk)} km</div></div>
+  <div><div class="qs-lbl">⏱ Est. Time</div><div class="qs-val" style="color:#3B82F6;">{fmt_time(mt)}</div></div>
+  <div><div class="qs-lbl">💰 Min. Cost</div><div class="qs-val" style="color:#10B981;">₹{mc}</div></div>
+  <div><div class="qs-lbl">🚌 Options</div><div class="qs-val">{len(routes)} Modes</div></div>
+</div>
+</div>""", unsafe_allow_html=True)
 
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    eq1,eq2,eq3 = st.columns(3)
-    with eq1:
-        if st.button("🚇 Cheapest option?"):
-            st.session_state.prefill = "Which is the cheapest option for my journey?"
-    with eq2:
-        if st.button("🌙 Safe route at night?"):
-            st.session_state.prefill = "Safest route home after 10 PM?"
-    with eq3:
-        if st.button("🌿 Most eco-friendly?"):
-            st.session_state.prefill = "Which option is greenest for environment?"
+# ══════════════════════════════════
+# CENTER PANEL — Routes + Alerts
+# ══════════════════════════════════
+with cp:
+    st.markdown('<div style="height:calc(100vh - 68px);overflow-y:auto;padding:14px 16px;background:#0B0F1A;">', unsafe_allow_html=True)
+    routes=st.session_state.routes
 
-    for msg in st.session_state.messages:
-        css = "chat-user" if msg["role"]=="user" else "chat-ai"
-        icon = "💬" if msg["role"]=="user" else "🤖"
-        st.markdown(f"<div class='{css}'>{icon} {msg['content']}</div>", unsafe_allow_html=True)
+    if routes:
+        best_r  = next((r for r in routes if r.get("best")), routes[0])
+        cheap_r = min(routes,key=lambda r:r["cost"])
+        fast_r  = min(routes,key=lambda r:r["time"])
+        eco_r   = max(routes,key=lambda r:r.get("carbon_score",0))
+        safe_r  = max(routes,key=lambda r:r.get("safety_score",0))
 
-    prefill_val = st.session_state.pop("prefill", "")
-    user_input = st.text_input("💬 Ask anything:", value=prefill_val, placeholder="e.g. Mujhe college 9 baje tak pahunchna hai ₹50 mein...")
+        def short(m): parts=m.split(); return " ".join(parts[1:3]) if len(parts)>2 else m.split()[0]
 
-    if st.button("Send 🚀", use_container_width=True) and user_input:
-        st.session_state.messages.append({"role": "user", "content": user_input})
-        reply = ask_ai(
-            st.session_state.messages,
-            source=st.session_state.get("last_src",""),
-            destination=st.session_state.get("last_dst",""),
-            distance_km=st.session_state.get("last_dist",0),
-            routes=st.session_state.get("last_routes",[])
-        )
-        st.session_state.messages.append({"role": "assistant", "content": reply})
-        st.rerun()
+        st.markdown(f"""<div class="filter-tabs">
+<div class="ftab best">⭐ Best Overall<br><small>{short(best_r['mode'])} • ₹{best_r['cost']} • {fmt_time(best_r['time'])}</small></div>
+<div class="ftab cheap">💚 Cheapest<br><small>{short(cheap_r['mode'])} • ₹{cheap_r['cost']} • {fmt_time(cheap_r['time'])}</small></div>
+<div class="ftab fast">🔴 Fastest<br><small>{short(fast_r['mode'])} • ₹{fast_r['cost']} • {fmt_time(fast_r['time'])}</small></div>
+<div class="ftab eco">🌿 Eco-Friendly<br><small>{short(eco_r['mode'])} • ₹{eco_r['cost']} • {fmt_time(eco_r['time'])}</small></div>
+<div class="ftab safe">🛡️ Safest<br><small>{short(safe_r['mode'])}<br>Safety Score: {safe_r.get('safety_score',90)}</small></div>
+</div>""", unsafe_allow_html=True)
 
-    if st.button("🗑️ Clear Chat"):
-        st.session_state.messages = []
-        st.rerun()
+        src_s=st.session_state.last_src.split(",")[0]
+        dst_s=st.session_state.last_dst.split(",")[0]
 
-# ══════════════════════════════════════════
-# PAGE: SAFETY & CARBON
-# ══════════════════════════════════════════
-elif page == "🛡️ Safety & Carbon":
-    st.markdown("<div class='section-header'>🛡️ Safety Score & 🌿 Carbon Score</div>", unsafe_allow_html=True)
-    routes = st.session_state.get("last_routes", calculate_routes(15))
+        st.markdown(f"""<div class="sec-row">
+<div class="sec-title">Recommended Routes</div>
+<div class="sec-count">{len(routes)} Options Found</div>
+</div>""", unsafe_allow_html=True)
 
-    tab1, tab2 = st.tabs(["🛡️ Safety Score", "🌿 Carbon Score"])
-    with tab1:
-        st.markdown("### Route Safety Rankings")
-        for r in sorted(routes, key=lambda x: -x["safety_score"]):
-            color = "#00C853" if r["safety_score"]>=85 else ("#FFB300" if r["safety_score"]>=65 else "#EF5350")
-            st.markdown(f"""
-            <div class='route-card'>
-                <div style='display:flex;justify-content:space-between;align-items:center;'>
-                    <span class='route-title'>{r['mode']}</span>
-                    <span style='font-size:1.2rem;font-weight:700;color:{color};'>{r['safety_score']}/100</span>
-                </div>
-                <div style='background:#0D1F3C;border-radius:8px;height:10px;margin-top:8px;'>
-                    <div style='background:{color};width:{r["safety_score"]}%;height:10px;border-radius:8px;'></div>
-                </div>
-            </div>""", unsafe_allow_html=True)
+        shown=0
+        for i,r in enumerate(routes):
+            if shown==3:
+                with st.expander(f"▼ Show {len(routes)-3} More Options"):
+                    for r2 in routes[3:]:
+                        ic2,icls2=micon(r2["mode"])
+                        s2="#10B981" if r2.get("safety_score",80)>=85 else "#F59E0B"
+                        c2="#10B981" if r2.get("carbon_score",50)>=80 else "#F59E0B"
+                        st.markdown(f"""<div class="rcard" style="margin-bottom:8px;">
+<div class="rcinner">
+  <div class="micon {icls2}">{ic2}</div>
+  <div class="rinfo" style="flex:1;">
+    <div class="rname">{r2['mode']}</div>
+    <div class="rmeta"><span>{fmt_time(r2['time'])}</span><span>•</span><span>{r2.get('desc','')}</span></div>
+    <div class="rscores"><span class="rscore">🛡️<span style="color:{s2};"> {r2.get('safety_score',80)}</span></span><span class="rscore">🌿<span style="color:{c2};"> {r2.get('carbon_score',50)}</span></span></div>
+  </div>
+  <div class="rright"><div class="rfare">₹{r2['cost']}</div></div>
+</div></div>""", unsafe_allow_html=True)
+                break
 
-        st.markdown("### 🛡️ Safety Factors We Analyse")
-        f1,f2 = st.columns(2)
-        with f1:
-            for f in ["👥 Crowd density analysis","💡 Street lighting level","✅ Verified safe zones"]:
-                st.info(f)
-        with f2:
-            for f in ["🕐 Time-of-day risk rating","👩 Women safety priority mode","🚨 Emergency SOS integration"]:
-                st.info(f)
+            ic,icls=micon(r["mode"])
+            is_best=r.get("best",False)
+            cls="rcard best" if is_best else "rcard"
+            badge=""
+            if is_best:   badge='<span class="bpill pgold">⭐ BEST OVERALL</span>'
+            elif r==cheap_r: badge='<span class="bpill pgreen">💚 CHEAPEST</span>'
+            elif r==fast_r:  badge='<span class="bpill pred">🔴 FASTEST</span>'
+            elif r==eco_r:   badge='<span class="bpill pgreen">🌿 ECO-FRIENDLY</span>'
+            elif r==safe_r:  badge='<span class="bpill pblue">🛡️ SAFEST</span>'
+            mid=""
+            if "Local Train" in r["mode"]: mid="→ CST/Dadar "
+            elif "Metro" in r["mode"]: mid="→ Metro Stn "
+            sc_color="#10B981" if r.get("safety_score",80)>=85 else ("#F59E0B" if r.get("safety_score",80)>=65 else "#EF4444")
+            cc_color="#10B981" if r.get("carbon_score",50)>=80 else ("#F59E0B" if r.get("carbon_score",50)>=50 else "#EF4444")
+            co2_str=f'<span class="rscore">🌿 Saves {r.get("co2",0)}g CO₂</span>' if r.get("co2",0)>0 else ""
+            st.markdown(f"""<div class="{cls}">
+<div class="rcinner">
+  <div class="micon {icls}">{ic}</div>
+  <div style="flex:1;">
+    <div class="rname">{r['mode']}</div>
+    <div class="rpath">{src_s} {mid}→ {dst_s}</div>
+    <div class="rmeta"><span>{fmt_time(r['time'])}</span><span>•</span><span style="font-size:.7rem;">{r.get('desc','')}</span></div>
+    <div class="rscores">
+      <span class="rscore">🛡️ <span style="color:{sc_color};">Safety {r.get('safety_score',80)}</span></span>
+      <span class="rscore">🌿 <span style="color:{cc_color};">Carbon {r.get('carbon_score',50)}</span></span>
+      {co2_str}
+    </div>
+  </div>
+  <div class="rright"><div class="rfare">₹{r['cost']}</div>{badge}</div>
+</div></div>""", unsafe_allow_html=True)
+            shown+=1
 
-    with tab2:
-        st.markdown("### 🌿 Carbon Footprint Rankings")
-        for r in sorted(routes, key=lambda x: -x["carbon_score"]):
-            color = "#00C853" if r["carbon_score"]>=80 else ("#FFB300" if r["carbon_score"]>=50 else "#EF5350")
-            st.markdown(f"""
-            <div class='route-card'>
-                <div style='display:flex;justify-content:space-between;align-items:center;'>
-                    <span class='route-title'>{r['mode']}</span>
-                    <span style='font-size:1.2rem;font-weight:700;color:{color};'>{r['carbon_score']}/100 🌿</span>
-                </div>
-                <div style='background:#0D1F3C;border-radius:8px;height:10px;margin-top:8px;'>
-                    <div style='background:{color};width:{r["carbon_score"]}%;height:10px;border-radius:8px;'></div>
-                </div>
-            </div>""", unsafe_allow_html=True)
-
-        c1,c2,c3 = st.columns(3)
-        with c1: st.metric("CO₂ Saved This Month","12.4 kg","↓ 30% vs last month")
-        with c2: st.metric("Green Points Earned","340 pts","+85 this week")
-        with c3: st.metric("Eco Rank","#47 / 500","↑ 12 spots")
-
-# ══════════════════════════════════════════
-# PAGE: LIVE ALERTS
-# ══════════════════════════════════════════
-elif page == "🔔 Live Alerts":
-    st.markdown("<div class='section-header'>🔔 Live Commute Alerts</div>", unsafe_allow_html=True)
-
-    conn = sqlite3.connect("onejourney.db")
-    alerts = conn.execute("SELECT type, message, severity FROM alerts ORDER BY id DESC").fetchall()
-    conn.close()
-
-    sev_icon  = {"high":"🔴","medium":"🟡","low":"🟢"}
-    sev_color = {"high":"#B71C1C","medium":"#E65100","low":"#1B5E20"}
-    for atype, msg, sev in alerts:
-        color = sev_color.get(sev,"#1565C0")
-        st.markdown(f"""
-        <div class='alert-card' style='border-left:4px solid {color};'>
-            {sev_icon.get(sev,"🔵")} <b style='color:{color};'>{atype} Alert</b><br>
-            <span style='color:#CBD5E1;'>{msg}</span>
-        </div>""", unsafe_allow_html=True)
-
-    st.markdown("<div class='section-header'>🗺️ Live Disruption Map</div>", unsafe_allow_html=True)
-    last_lat = st.session_state.get("last_coords_src", (19.076, 72.877))
-    m = folium.Map(location=list(last_lat), zoom_start=11, tiles="CartoDB dark_matter")
-    disruptions = [
-        ([last_lat[0]+0.04, last_lat[1]+0.02], "🔴 Heavy Traffic Ahead", "red"),
-        ([last_lat[0]-0.02, last_lat[1]+0.05], "🟡 Metro Delay", "orange"),
-        ([last_lat[0]+0.01, last_lat[1]-0.03], "🟢 Clear Zone", "green"),
-    ]
-    for loc, popup, color in disruptions:
-        folium.CircleMarker(loc, radius=20, color=color, fill=True, fill_opacity=0.4, popup=popup).add_to(m)
-        folium.Marker(loc, popup=popup, icon=folium.Icon(color=color, icon="info-sign")).add_to(m)
-    st_folium(m, width=None, height=380)
-
-# ══════════════════════════════════════════
-# PAGE: MY DASHBOARD
-# ══════════════════════════════════════════
-elif page == "📊 My Dashboard":
-    st.markdown("<div class='section-header'>📊 My Commute Dashboard</div>", unsafe_allow_html=True)
-
-    conn = sqlite3.connect("onejourney.db")
-    trips_db = conn.execute("SELECT source, destination, mode, cost, time_min, safety_score, carbon_score, timestamp FROM trips ORDER BY id DESC LIMIT 10").fetchall()
-    total_trips = conn.execute("SELECT COUNT(*) FROM trips").fetchone()[0]
-    total_saved = conn.execute("SELECT SUM(cost) FROM trips").fetchone()[0] or 0
-    conn.close()
-
-    c1,c2,c3,c4 = st.columns(4)
-    with c1: st.metric("Total Trips Planned", total_trips or 0)
-    with c2: st.metric("Total Fare Compared", f"₹{total_saved or 0}")
-    with c3: st.metric("CO₂ Saved Est.", f"{round((total_trips or 1) * 0.6, 1)} kg")
-    with c4: st.metric("Favourite Mode", "🚇 Metro")
-
-    if trips_db:
-        st.markdown("### 📅 Recent Trips")
-        import pandas as pd
-        df = pd.DataFrame(trips_db, columns=["From","To","Mode","Cost (₹)","Time (min)","Safety","Carbon","Time"])
-        st.dataframe(df, use_container_width=True, hide_index=True)
     else:
-        st.info("🗺️ Use the Route Planner to start planning trips — they'll appear here!")
+        st.markdown("""<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:45vh;text-align:center;">
+<div style="font-size:3.5rem;margin-bottom:12px;">🗺️</div>
+<div style="font-size:1rem;font-weight:700;color:#fff;margin-bottom:6px;">Plan Your Journey</div>
+<div style="font-size:.8rem;color:#64748B;max-width:280px;">Enter source & destination on the left, then click Find Best Routes for AI-powered recommendations.</div>
+</div>""", unsafe_allow_html=True)
 
-    st.markdown("### ⚙️ My Preferences")
-    p1,p2,p3 = st.columns(3)
-    with p1:
-        st.markdown("""<div class='route-card'><div class='route-title'>💰 Budget</div>
-        <div class='route-meta'>Under ₹50 per trip</div></div>""", unsafe_allow_html=True)
-    with p2:
-        st.markdown("""<div class='route-card'><div class='route-title'>📅 Peak Time</div>
-        <div class='route-meta'>Mon–Sat, 8:00 AM & 6 PM</div></div>""", unsafe_allow_html=True)
-    with p3:
-        st.markdown("""<div class='route-card'><div class='route-title'>🌿 Eco Goal</div>
-        <div class='route-meta'>Carbon score above 70</div></div>""", unsafe_allow_html=True)
+    # Alerts
+    conn=sqlite3.connect("onejourney.db")
+    alerts=conn.execute("SELECT type,message,severity,timestamp FROM alerts ORDER BY CASE severity WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END LIMIT 4").fetchall()
+    conn.close()
+    si={"high":"⚠️","medium":"🌧️","low":"🚌"}
+    sc_={"high":"#EF4444","medium":"#F59E0B","low":"#10B981"}
+    alcards="".join([f"""<div class="acard">
+<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px;">
+  <span>{si.get(sv,'ℹ️')}</span>
+  <span class="atype" style="color:{sc_.get(sv,'#3B82F6')};">{at} Alert</span>
+</div>
+<div class="amsg">{msg}</div>
+<div style="display:flex;align-items:center;justify-content:space-between;">
+  <span class="asev s{sv[0]}">{sv.capitalize()}</span>
+  <span class="atime">{ts}</span>
+</div>
+</div>""" for at,msg,sv,ts in alerts])
+    st.markdown(f"""<div style="margin-top:16px;">
+<div class="sec-row"><div class="sec-title">Live Alerts</div><div style="font-size:.72rem;color:#3B82F6;cursor:pointer;">View All Alerts →</div></div>
+<div class="agrid">{alcards}</div>
+</div>""", unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+# ══════════════════════════════════
+# RIGHT PANEL — Map + AI
+# ══════════════════════════════════
+with rp:
+    st.markdown('<div style="height:calc(100vh - 68px);display:flex;flex-direction:column;background:#111827;border-left:1px solid #1E2D4A;overflow:hidden;">', unsafe_allow_html=True)
+
+    # Map header
+    st.markdown("""<div style="padding:12px 14px;border-bottom:1px solid #1E2D4A;">
+<div style="display:flex;align-items:center;justify-content:space-between;">
+  <div style="font-size:.88rem;font-weight:700;color:#fff;">Route Map</div>
+  <div style="font-size:.7rem;font-weight:600;color:#3B82F6;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);padding:3px 9px;border-radius:6px;cursor:pointer;">View Full Map</div>
+</div>
+</div>""", unsafe_allow_html=True)
+
+    import folium
+    from streamlit_folium import st_folium
+    sc=st.session_state.src_coords; dc=st.session_state.dst_coords
+    if sc and dc:
+        mid=((sc[0]+dc[0])/2,(sc[1]+dc[1])/2)
+        dk=st.session_state.last_dist
+        zoom=13 if dk<5 else(11 if dk<25 else(9 if dk<80 else 7))
+        m=folium.Map(location=list(mid),zoom_start=zoom,tiles="CartoDB dark_matter")
+        folium.Marker(list(sc),popup=f"📍 {st.session_state.last_src.split(',')[0]}",
+            icon=folium.Icon(color="green",icon="home",prefix="fa")).add_to(m)
+        folium.Marker(list(dc),popup=f"🎯 {st.session_state.last_dst.split(',')[0]}",
+            icon=folium.Icon(color="red",icon="flag",prefix="fa")).add_to(m)
+        folium.PolyLine([list(sc),list(dc)],color="#3B82F6",weight=4,opacity=0.9,
+            tooltip=f"{round(dk,1)}km").add_to(m)
+        folium.Circle(list(sc),radius=400,color="#10B981",fill=True,fill_opacity=0.15).add_to(m)
+        folium.Circle(list(dc),radius=400,color="#EF4444",fill=True,fill_opacity=0.15).add_to(m)
+        if dk>60:
+            mp=((sc[0]+dc[0])/2,(sc[1]+dc[1])/2)
+            folium.CircleMarker(list(mp),radius=5,color="#F59E0B",fill=True,fill_opacity=0.8,popup="Midpoint").add_to(m)
+    else:
+        m=folium.Map(location=[19.2,73.5],zoom_start=7,tiles="CartoDB dark_matter")
+        for city,(lat,lon) in list(CITIES.items())[:25]:
+            ct=get_city_type(city)
+            color="blue" if ct=="Mumbai" else("red" if ct=="Pune" else "gray")
+            folium.CircleMarker([lat,lon],radius=4 if ct!="Other" else 2,color=color,fill=True,fill_opacity=0.7,popup=city).add_to(m)
+    st_folium(m,width=None,height=195,returned_objects=[])
+
+    # Map stats
+    if sc and dc:
+        dk=st.session_state.last_dist
+        routes=st.session_state.routes
+        mt=min(r["time"] for r in routes) if routes else 0
+        st.markdown(f"""<div class="mstats">
+<div><div class="ms-val">{round(dk)} km</div><div class="ms-lbl">Distance</div></div>
+<div><div class="ms-val" style="color:#3B82F6;">{fmt_time(mt)}</div><div class="ms-lbl">Est. Time</div></div>
+<div><div class="ms-val">Via NH65</div><div class="ms-lbl">Best Route</div></div>
+</div>""", unsafe_allow_html=True)
+
+    st.markdown('<div style="border-top:1px solid #1E2D4A;"></div>', unsafe_allow_html=True)
+
+    # AI Chat
+    st.markdown("""<div style="padding:10px 12px 4px;">
+<div style="display:flex;align-items:center;justify-content:space-between;">
+  <div style="display:flex;align-items:center;gap:7px;font-size:.82rem;font-weight:700;color:#fff;">🤖 AI Assistant</div>
+  <div style="font-size:.68rem;color:#3B82F6;cursor:pointer;">🗑️ Clear Chat</div>
+</div>
+</div>""", unsafe_allow_html=True)
+
+    chat_html="".join([
+        f'<div class="bu">{m["content"]}</div>' if m["role"]=="user"
+        else f'<div class="ba"><span>🤖</span><div>{m["content"]}</div></div>'
+        for m in st.session_state.messages[-4:]])
+    st.markdown(f'<div class="chat-wrap">{chat_html}</div>', unsafe_allow_html=True)
+
+    chat_in=st.text_input("",placeholder="Ask me anything about your journey...",key="chat_inp",label_visibility="collapsed")
+    c1,c2=st.columns([3,1])
+    with c1:
+        if st.button("Send 🚀",key="send_btn",use_container_width=True) and chat_in:
+            st.session_state.messages.append({"role":"user","content":chat_in})
+            reply=ask_ai(st.session_state.messages,src=st.session_state.last_src,
+                dst=st.session_state.last_dst,dist=st.session_state.last_dist,
+                routes=st.session_state.routes,time_pref=st.session_state.get("time_inp",""))
+            st.session_state.messages.append({"role":"assistant","content":reply})
+            st.rerun()
+    with c2:
+        if st.button("🗑️",key="clr_btn"):
+            st.session_state.messages=[]; st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
