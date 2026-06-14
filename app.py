@@ -306,7 +306,7 @@ with sb:
                ("📊","Dashboard"),("📅","Trip History"),("⚙️","Preferences"),("ℹ️","About Us")]
     nav_html="".join([f'<div class="sbitem {"active" if st.session_state.page==l else ""}">{ic} {l}</div>' for ic,l in nav_items])
     conn=sqlite3.connect("onejourney.db")
-    stats=conn.execute("SELECT COUNT(*),SUM(co2_saved_g) FROM trips").fetchone()
+    stats = conn.execute("SELECT COUNT(*) FROM trips").fetchone()
     conn.close()
     co2=round((stats[1] or 0)/1000,1); trips_n=stats[0] or 0
     st.markdown(f"""<div style="height:calc(100vh - 68px);display:flex;flex-direction:column;padding:10px 6px;background:#111827;border-right:1px solid #1E2D4A;overflow-y:auto;">
