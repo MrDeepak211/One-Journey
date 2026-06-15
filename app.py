@@ -304,13 +304,24 @@ sb, lp, cp, rp = st.columns([1.1, 1.55, 3.6, 1.9])
 with sb:
     nav_items=[("🗺️","Route Planner"),("🤖","AI Assistant"),("🔔","Live Alerts"),
                ("📊","Dashboard"),("📅","Trip History"),("⚙️","Preferences"),("ℹ️","About Us")]
+<<<<<<< HEAD
     nav_html="".join([f'<div class="sbitem {"active" if st.session_state.page==l else ""}">{ic} {l}</div>' for ic,l in nav_items])                 
       conn = sqlite3.connect("onejourney.db")
+=======
+
+    nav_html="".join([f'<div class="sbitem {"active" if st.session_state.page==l else ""}">{ic} {l}</div>' for ic,l in nav_items])
+
+    conn = sqlite3.connect("onejourney.db")
+>>>>>>> 44d2064 (Fix database schema)
     stats = conn.execute("SELECT COUNT(*) FROM trips").fetchone()
     conn.close()
 
     trips_n = stats[0] or 0
     co2 = round(trips_n * 0.6, 1)
+<<<<<<< HEAD
+=======
+
+>>>>>>> 44d2064 (Fix database schema)
     st.markdown(f"""<div style="height:calc(100vh - 68px);display:flex;flex-direction:column;padding:10px 6px;background:#111827;border-right:1px solid #1E2D4A;overflow-y:auto;">
 <div style="flex:1;">{nav_html}</div>
 <div class="impact-box">
