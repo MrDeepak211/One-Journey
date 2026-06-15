@@ -304,15 +304,13 @@ sb, lp, cp, rp = st.columns([1.1, 1.55, 3.6, 1.9])
 with sb:
     nav_items=[("🗺️","Route Planner"),("🤖","AI Assistant"),("🔔","Live Alerts"),
                ("📊","Dashboard"),("📅","Trip History"),("⚙️","Preferences"),("ℹ️","About Us")]
-<<<<<<< HEAD
+ HEAD
     nav_html="".join([f'<div class="sbitem {"active" if st.session_state.page==l else ""}">{ic} {l}</div>' for ic,l in nav_items])                 
       conn = sqlite3.connect("onejourney.db")
-=======
 
     nav_html="".join([f'<div class="sbitem {"active" if st.session_state.page==l else ""}">{ic} {l}</div>' for ic,l in nav_items])
 
     conn = sqlite3.connect("onejourney.db")
->>>>>>> 44d2064 (Fix database schema)
     stats = conn.execute("SELECT COUNT(*) FROM trips").fetchone()
     conn.close()
 
