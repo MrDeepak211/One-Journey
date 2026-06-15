@@ -297,39 +297,77 @@ st.markdown("""<div class="navbar">
 
 # ── LAYOUT: 4 columns ──
 sb, lp, cp, rp = st.columns([1.1, 1.55, 3.6, 1.9])
-
 # ══════════════════════════════════
 # SIDEBAR
 # ══════════════════════════════════
 with sb:
-    nav_items=[("🗺️","Route Planner"),("🤖","AI Assistant"),("🔔","Live Alerts"),
-               ("📊","Dashboard"),("📅","Trip History"),("⚙️","Preferences"),("ℹ️","About Us")]
-<<<<<<< HEAD
-    nav_html="".join([f'<div class="sbitem {"active" if st.session_state.page==l else ""}">{ic} {l}</div>' for ic,l in nav_items])                 
-      conn = sqlite3.connect("onejourney.db")
+    nav_items=[
+        ("🗺️","Route Planner"),
+        ("🤖","AI Assistant"),
+        ("🔔","Live Alerts"),
+        ("📊","Dashboard"),
+        ("📅","Trip History"),
+        ("⚙️","Preferences"),
+        ("ℹ️","About Us")
+    ]
 
-    nav_html="".join([f'<div class="sbitem {"active" if st.session_state.page==l else ""}">{ic} {l}</div>' for ic,l in nav_items])
+    nav_html="".join([
+        f'<div class="sbitem {"active" if st.session_state.page==l else ""}">{ic} {l}</div>'
+        for ic,l in nav_items
+    ])
 
     conn = sqlite3.connect("onejourney.db")
     stats = conn.execute("SELECT COUNT(*) FROM trips").fetchone()
     conn.close()
 
-    trips_n = stats[0] or 0
+    trips_n = stats[0] if stats else 0
     co2 = round(trips_n * 0.6, 1)
 
-    st.markdown(f"""<div style="height:calc(100vh - 68px);display:flex;flex-direction:column;padding:10px 6px;background:#111827;border-right:1px solid #1E2D4A;overflow-y:auto;">
-<div style="flex:1;">{nav_html}</div>
-<div class="impact-box">
-  <div style="font-size:.72rem;font-weight:700;color:#10B981;margin-bottom:8px;">🌿 Our Impact</div>
-  <div class="irow"><div class="iicon" style="background:rgba(16,185,129,.15);">♻️</div><div><div class="ival" style="color:#10B981;">{co2} kg</div><div class="ilbl">Carbon Saved CO₂</div></div></div>
-  <div class="irow"><div class="iicon" style="background:rgba(59,130,246,.15);">⏱️</div><div><div class="ival" style="color:#3B82F6;">12.4 hrs</div><div class="ilbl">Time Saved</div></div></div>
-  <div class="irow"><div class="iicon" style="background:rgba(245,158,11,.15);">💰</div><div><div class="ival" style="color:#F59E0B;">₹1,250</div><div class="ilbl">Money Saved</div></div></div>
-</div>
-<div style="display:flex;align-items:center;gap:8px;padding:10px 8px;border-radius:9px;background:linear-gradient(135deg,#1E2D4A,#0F172A);margin-top:8px;border:1px solid #1E2D4A;">
-  <div style="font-size:1.8rem;">🐺</div>
-  <div><div style="font-size:.8rem;font-weight:700;color:#fff;">Night Wolf</div><div style="font-size:.65rem;color:#3B82F6;">Building the future of smart mobility 💙</div></div>
-</div>
-</div>""", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style="height:calc(100vh - 68px);display:flex;flex-direction:column;padding:10px 6px;background:#111827;border-right:1px solid #1E2D4A;overflow-y:auto;">
+        <div style="flex:1;">{nav_html}</div>
+
+        <div class="impact-box">
+            <div style="font-size:.72rem;font-weight:700;color:#10B981;margin-bottom:8px;">
+                🌿 Our Impact
+            </div>
+
+            <div class="irow">
+                <div class="iicon" style="background:rgba(16,185,129,.15);">♻️</div>
+                <div>
+                    <div class="ival" style="color:#10B981;">{co2} kg</div>
+                    <div class="ilbl">Carbon Saved CO₂</div>
+                </div>
+            </div>
+
+            <div class="irow">
+                <div class="iicon" style="background:rgba(59,130,246,.15);">⏱️</div>
+                <div>
+                    <div class="ival" style="color:#3B82F6;">12.4 hrs</div>
+                    <div class="ilbl">Time Saved</div>
+                </div>
+            </div>
+
+            <div class="irow">
+                <div class="iicon" style="background:rgba(245,158,11,.15);">💰</div>
+                <div>
+                    <div class="ival" style="color:#F59E0B;">₹1,250</div>
+                    <div class="ilbl">Money Saved</div>
+                </div>
+            </div>
+        </div>
+
+        <div style="display:flex;align-items:center;gap:8px;padding:10px 8px;border-radius:9px;background:linear-gradient(135deg,#1E2D4A,#0F172A);margin-top:8px;border:1px solid #1E2D4A;">
+            <div style="font-size:1.8rem;">🐺</div>
+            <div>
+                <div style="font-size:.8rem;font-weight:700;color:#fff;">Night Wolf</div>
+                <div style="font-size:.65rem;color:#3B82F6;">
+                    Building the future of smart mobility 💙
+                </div>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # ══════════════════════════════════
 # LEFT PANEL — Form
