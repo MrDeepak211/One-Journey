@@ -319,7 +319,6 @@ with sb:
 <<<<<<< HEAD
 =======
 
- 44d2064 (Fix database schema)
     st.markdown(f"""<div style="height:calc(100vh - 68px);display:flex;flex-direction:column;padding:10px 6px;background:#111827;border-right:1px solid #1E2D4A;overflow-y:auto;">
 <div style="flex:1;">{nav_html}</div>
 <div class="impact-box">
