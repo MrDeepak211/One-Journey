@@ -307,20 +307,26 @@ sb, lp, cp, rp = st.columns([1.1, 1.55, 3.6, 1.9])
 # SIDEBAR
 # ══════════════════════════════════
 with sb:
-    nav_items=[
-        ("🗺️","Route Planner"),
-        ("🤖","AI Assistant"),
-        ("🔔","Live Alerts"),
-        ("📊","Dashboard"),
-        ("📅","Trip History"),
-        ("⚙️","Preferences"),
-        ("ℹ️","About Us")
-    ]
+  if st.button("🗺️ Route Planner", use_container_width=True):
+    st.session_state.page = "Route Planner"
 
-    nav_html="".join([
-        f'<div class="sbitem {"active" if st.session_state.page==l else ""}">{ic} {l}</div>'
-        for ic,l in nav_items
-    ])
+if st.button("🤖 AI Assistant", use_container_width=True):
+    st.session_state.page = "AI Assistant"
+
+if st.button("🔔 Live Alerts", use_container_width=True):
+    st.session_state.page = "Live Alerts"
+
+if st.button("📊 Dashboard", use_container_width=True):
+    st.session_state.page = "Dashboard"
+
+if st.button("📅 Trip History", use_container_width=True):
+    st.session_state.page = "Trip History"
+
+if st.button("⚙️ Preferences", use_container_width=True):
+    st.session_state.page = "Preferences"
+
+if st.button("ℹ️ About Us", use_container_width=True):
+    st.session_state.page = "About Us"
 
     conn = sqlite3.connect("onejourney.db")
     stats = conn.execute("SELECT COUNT(*) FROM trips").fetchone()
